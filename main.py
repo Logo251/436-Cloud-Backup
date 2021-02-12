@@ -17,8 +17,19 @@ def main(argv):
         print("cloudBackup.py <backup/restore> <source_directory/source_bucket:directory> <destination_bucket:directory/destination_directory>")
         sys.exit(2)
 
+    #Choose path based on inputMode
+    if inputMode == "backup":
+        Backup(inputSource, inputDestination)
+    elif inputMode == "restore":
+        Restore(inputSource, inputDestination)
+    else:
+        #This handles bad modes.
+        print("cloudBackup.py <backup/restore> <source_directory/source_bucket:directory> <destination_bucket:directory/destination_directory>")
+
+def Backup(source, destination):
 
 
+def Restore(source, destination):
 
 
 # This is a sample Python script.
