@@ -60,18 +60,23 @@ def Backup(source, originalSource, destination):
     #find files in location.
     for entry in os.scandir(source):
         seen = False
-        for obj in resource.Bucket(bucket).objects.all():
-            if obj.key.rstrip('/') == folder + entry.path[len(originalSource)+1:].replace('\\', '/'):
-                seen = True
-                if obj.last_modified.timestamp() < os.path.getmtime(entry.path) and entry.is_file():
-                    client.upload_file(entry.path, 'logo-class-bucket', folder + entry.path[len(originalSource)+1:].replace('\\', '/')) #File date modified checker, if it is there.
-                    print("updated " + entry.name)
-                break #This is not used lightly; other ways of doing this are far more complicated and this improves efficiency notably.
-                      #Furthermore, we aren't told we can't use it by code guidelines, so I do here.
+        if entry.is_file():
+            for obj in resource.Bucket(bucket).objects.all():
+                if obj.key.rstrip('/') == folder + entry.path[len(originalSource)+1:].replace('\\', '/'):
+                    seen = True
+                    if obj.last_modified.timestamp() < os.path.getmtime(entry.path) and entry.is_file():
+                        client.upload_file(entry.path, bucket, folder + entry.path[len(originalSource)+1:].replace('\\', '/')) #File date modified checker, if it is there.
+                        print("updated " + entry.name)
+        else:
+            Backup(entry.path, originalSource, destination)
+            #find folder.
+            for obj in resource.Bucket(bucket).objects.all():
+                if obj.key.rstrip('/') == folder + entry.path[len(originalSource)+1:].replace('\\', '/'):
+                    seen = True
 
         if not seen: #If file is not in the cloud at all, we can just copy and move on.
-            if(entry.is_file()):
-                client.upload_file(entry.path, 'logo-class-bucket', folder + entry.path[len(originalSource)+1:].replace('\\', '/'))
+            if entry.is_file():
+                client.upload_file(entry.path, bucket, folder + entry.path[len(originalSource)+1:].replace('\\', '/'))
                 print("created " + entry.name)
             else:
                 client.put_object(Bucket=bucket, Key = folder + entry.path[len(originalSource)+1:].replace('\\', '/') + '/')
@@ -80,37 +85,7 @@ def Backup(source, originalSource, destination):
 
 
 def Restore(source, destination, destinationOriginal):
-    # Local Variables
-    bucket = destination.split(':')[0]
-    folder = destination.split(':')[1] + '/'
-    client = boto3.client('s3')
-    resource = boto3.resource('s3')
-    destinationFolder = resource.ObjectSummary(bucket_name=bucket, key=folder)
-
-    # find files in location.
-    for obj in resource.Bucket(bucket).objects.all():
-        seen = False
-        for entry in os.scandir(source):
-            if obj.key.rstrip('/') == folder + entry.path[len(originalSource) + 1:].replace('\\', '/'):
-                seen = True
-                if obj.last_modified.timestamp() < os.path.getmtime(entry.path) and entry.is_file():
-                    client.upload_file(entry.path, 'logo-class-bucket',
-                                       folder + entry.path[len(originalSource) + 1:].replace('\\',
-                                                                                             '/'))  # File date modified checker, if it is there.
-                    print("updated " + entry.name)
-                break  # This is not used lightly; other ways of doing this are far more complicated and this improves efficiency notably.
-                # Furthermore, we aren't told we can't use it by code guidelines, so I do here.
-
-        if not seen:  # If file is not in the cloud at all, we can just copy and move on.
-            if (entry.is_file()):
-                client.upload_file(entry.path, 'logo-class-bucket',
-                                   folder + entry.path[len(originalSource) + 1:].replace('\\', '/'))
-                print("created " + entry.name)
-            else:
-                client.put_object(Bucket=bucket,
-                                  Key=folder + entry.path[len(originalSource) + 1:].replace('\\', '/') + '/')
-                print("created " + entry.name + " folder.")
-                Backup(entry.path, originalSource, destination)
+    print("hi")
 
 #Run Main
 if __name__ == "__main__":
