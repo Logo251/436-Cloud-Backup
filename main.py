@@ -2,7 +2,6 @@ import sys
 import getopt
 import boto3
 import os
-import datetime
 
 
 def main(argv):
@@ -45,6 +44,7 @@ def main(argv):
             print("Cannot restore from a bucket that does not have the given folder.")
             exit(2)
         Restore(inputSource, inputDestination, inputDestination)
+        print("Finished restoring.")
     else:
         #This handles bad modes.
         print("cloudBackup.py <backup/restore> <source_directory/source_bucket:directory> <destination_bucket:directory/destination_directory>")
@@ -64,7 +64,7 @@ def Backup(source, originalSource, destination):
             for obj in resource.Bucket(bucket).objects.all():
                 if obj.key.rstrip('/') == folder + entry.path[len(originalSource)+1:].replace('\\', '/'):
                     seen = True
-                    if obj.last_modified.timestamp() < os.path.getmtime(entry.path) and entry.is_file():
+                    if obj.last_modified.timestamp() < os.path.getmtime(entry.path):
                         client.upload_file(entry.path, bucket, folder + entry.path[len(originalSource)+1:].replace('\\', '/')) #File date modified checker, if it is there.
                         print("updated " + entry.name)
         else:
@@ -84,8 +84,36 @@ def Backup(source, originalSource, destination):
                 Backup(entry.path, originalSource, destination)
 
 
-def Restore(source, destination, destinationOriginal):
-    print("hi")
+def Restore(source, destination, Originaldestination):
+    #Local Variables
+    bucket = source.split(':')[0]
+    folder = source.split(':')[1] + '/'
+    client = boto3.client('s3')
+    resource = boto3.resource('s3')
+
+    #Check if inital folder exists.
+    if not os.path.exists(destination):
+        os.mkdir(destination)
+
+    #find files in location.
+    for obj in resource.Bucket(bucket).objects.all():
+        if obj.key != folder:
+            #convert S3 file storage into windows-format.
+            cloudFile = destination + '\\' + obj.key[len(folder):].replace('/', '\\')
+            if obj.key[-1] != '/':
+                if os.path.exists(cloudFile):
+                    if obj.last_modified.timestamp() > os.path.getmtime(cloudFile):
+                        client.download_file(bucket, obj.key, cloudFile) #File date modified checker, if it is there.
+                        print("downloaded and updated " + obj.key.split('/')[-1])
+                else:
+                    client.download_file(bucket, obj.key, cloudFile)
+                    print("downloaded " + obj.key.split('/')[-1])
+
+            else:
+                #check if folder exists, if not create it.
+                if not os.path.exists(cloudFile):
+                    os.mkdir(cloudFile)
+                    print("created " + obj.key.split('/')[-2] + " folder")
 
 #Run Main
 if __name__ == "__main__":
