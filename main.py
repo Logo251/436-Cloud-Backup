@@ -1,10 +1,14 @@
 import sys
 import getopt
 import boto3
+import os
+import datetime
+
 
 def main(argv):
     #Local Variables
-    s3 = boto3.resource('s3')
+    resource = boto3.resource('s3')
+    client = boto3.client('s3')
 
     #Attempt to assign input.
     try:
@@ -17,42 +21,96 @@ def main(argv):
 
     #Choose path based on inputMode
     if inputMode == "backup":
-        bucket = s3.Bucket(inputDestination.split(':')[0])
-        # check if bucket exists.
-        if bucket not in s3.buckets.all():
-            print("Bucket to save to does not exist.")
+        bucket = resource.Bucket(inputDestination.split(':')[0])  #check if bucket exists.
+        if bucket not in resource.buckets.all():
+            print("Cannot backup to a bucket that does not exist.")
             exit(2)
-
         #check if folder exists inside.
-        folder = s3.ObjectSummary(bucket_name=inputDestination.split(':')[0], key=(inputDestination.split(':')[1] + '/'))
+        folder = resource.ObjectSummary(bucket_name=inputDestination.split(':')[0], key=(inputDestination.split(':')[1]+ '/'))
         if folder not in bucket.objects.all():
-            print("Folder to save to inside bucket does not exist.")
-            exit(2)
+            client.put_object(Bucket = inputDestination.split(':')[0], Key = inputDestination.split(':')[1]+ '/')
+            print("created the folder the backups are to be written to")
 
-        Backup(inputSource, folder)
+        Backup(inputSource, inputSource, inputDestination)
+        print("Finished backing up.")
 
     elif inputMode == "restore":
-        bucket = s3.Bucket(inputSource.split(':')[0])  #check if bucket exists.
-        if bucket not in s3.buckets.all():
+        bucket = resource.Bucket(inputSource.split(':')[0])  #check if bucket exists.
+        if bucket not in resource.buckets.all():
             print("Cannot restore from bucket that does not exist.")
             exit(2)
         #check if folder exists inside.
-        folder = s3.ObjectSummary(bucket_name=inputSource.split(':')[0], key=(inputSource.split(':')[1]+ '/'))
+        folder = resource.ObjectSummary(bucket_name=inputSource.split(':')[0], key=(inputSource.split(':')[1]+ '/'))
         if folder not in bucket.objects.all():
             print("Cannot restore from a bucket that does not have the given folder.")
             exit(2)
-        Restore(folder, inputDestination)
+        Restore(inputSource, inputDestination, inputDestination)
     else:
         #This handles bad modes.
         print("cloudBackup.py <backup/restore> <source_directory/source_bucket:directory> <destination_bucket:directory/destination_directory>")
 
-def Backup(source, destination):
-    for my_bucket_object in destination.objects.all():
-        print(my_bucket_object)
+def Backup(source, originalSource, destination):
+    #Local Variables
+    bucket = destination.split(':')[0]
+    folder = destination.split(':')[1] + '/'
+    client = boto3.client('s3')
+    resource = boto3.resource('s3')
+    destinationFolder = resource.ObjectSummary(bucket_name=bucket, key=folder)
 
-def Restore(source, destination):
-    for my_bucket_object in source.objects.all():
-        print(my_bucket_object)
+    #find files in location.
+    for entry in os.scandir(source):
+        seen = False
+        for obj in resource.Bucket(bucket).objects.all():
+            if obj.key.rstrip('/') == folder + entry.path[len(originalSource)+1:].replace('\\', '/'):
+                seen = True
+                if obj.last_modified.timestamp() < os.path.getmtime(entry.path) and entry.is_file():
+                    client.upload_file(entry.path, 'logo-class-bucket', folder + entry.path[len(originalSource)+1:].replace('\\', '/')) #File date modified checker, if it is there.
+                    print("updated " + entry.name)
+                break #This is not used lightly; other ways of doing this are far more complicated and this improves efficiency notably.
+                      #Furthermore, we aren't told we can't use it by code guidelines, so I do here.
+
+        if not seen: #If file is not in the cloud at all, we can just copy and move on.
+            if(entry.is_file()):
+                client.upload_file(entry.path, 'logo-class-bucket', folder + entry.path[len(originalSource)+1:].replace('\\', '/'))
+                print("created " + entry.name)
+            else:
+                client.put_object(Bucket=bucket, Key = folder + entry.path[len(originalSource)+1:].replace('\\', '/') + '/')
+                print("created " + entry.name + " folder.")
+                Backup(entry.path, originalSource, destination)
+
+
+def Restore(source, destination, destinationOriginal):
+    # Local Variables
+    bucket = destination.split(':')[0]
+    folder = destination.split(':')[1] + '/'
+    client = boto3.client('s3')
+    resource = boto3.resource('s3')
+    destinationFolder = resource.ObjectSummary(bucket_name=bucket, key=folder)
+
+    # find files in location.
+    for obj in resource.Bucket(bucket).objects.all():
+        seen = False
+        for entry in os.scandir(source):
+            if obj.key.rstrip('/') == folder + entry.path[len(originalSource) + 1:].replace('\\', '/'):
+                seen = True
+                if obj.last_modified.timestamp() < os.path.getmtime(entry.path) and entry.is_file():
+                    client.upload_file(entry.path, 'logo-class-bucket',
+                                       folder + entry.path[len(originalSource) + 1:].replace('\\',
+                                                                                             '/'))  # File date modified checker, if it is there.
+                    print("updated " + entry.name)
+                break  # This is not used lightly; other ways of doing this are far more complicated and this improves efficiency notably.
+                # Furthermore, we aren't told we can't use it by code guidelines, so I do here.
+
+        if not seen:  # If file is not in the cloud at all, we can just copy and move on.
+            if (entry.is_file()):
+                client.upload_file(entry.path, 'logo-class-bucket',
+                                   folder + entry.path[len(originalSource) + 1:].replace('\\', '/'))
+                print("created " + entry.name)
+            else:
+                client.put_object(Bucket=bucket,
+                                  Key=folder + entry.path[len(originalSource) + 1:].replace('\\', '/') + '/')
+                print("created " + entry.name + " folder.")
+                Backup(entry.path, originalSource, destination)
 
 #Run Main
 if __name__ == "__main__":
